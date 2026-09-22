@@ -578,8 +578,16 @@
     markers[currentStep].label.div.classList.add("current");
   }
 
-  var STEP_ZOOM_R = 3.15; // close enough to read the map around each city
+  var STEP_ALT = 1.15; // close enough to read the map around each city
   var hasZoomedIn = false;
+
+  // The camera's field of view is vertical, so a tall phone screen shows a far
+  // narrower strip of ground than a desktop one. Pull back on portrait so the
+  // region around each city still fits across the screen.
+  function stepZoomRadius() {
+    var widen = camera.aspect < 1 ? Math.min(1 / camera.aspect, 1.7) : 1;
+    return GLOBE_R + STEP_ALT * widen;
+  }
 
   function flyCameraTo(targetPos) {
     var fromDir = camera.position.clone().normalize();
@@ -587,7 +595,7 @@
     var travel = fromDir.angleTo(toDir);
     // only the opening move changes altitude; after that the camera just
     // travels across the map at whatever zoom the viewer is sitting at
-    var toR = STEP_ZOOM_R;
+    var toR = stepZoomRadius();
     if (hasZoomedIn) toR = camTween ? camTween.toR : camera.position.length();
     hasZoomedIn = true;
     camTween = {
@@ -784,6 +792,14 @@
     if (t >= 1) { camTween = null; controls.enabled = true; }
   }
 
+  // On the phone layout the text covers the top of the screen, so aim a little
+  // high and let the city being described sit in the clear space below it.
+  // Applied after lookAt/controls.update, both of which reset the orientation.
+  function applyViewTilt() {
+    if (window.innerWidth > 760) return;
+    camera.rotateX(0.13);
+  }
+
   var CLOUD_DRIFT = 0.004; // radians per second
 
   function animate() {
@@ -803,6 +819,7 @@
     updateCameraTween(now);
 
     if (!camTween) { camera.lookAt(controls.target); controls.update(); }
+    applyViewTilt();
 
     renderer.render(scene, camera);
     labelRenderer.render(scene, camera);
