@@ -331,9 +331,9 @@
       glowCtx.scale(stretch, 1);
       var grad = glowCtx.createRadialGradient(0, 0, 0, 0, 0, r);
       var a = b.progress;
-      grad.addColorStop(0, "rgba(" + b.rgb + "," + (0.40 * a) + ")");
-      grad.addColorStop(0.35, "rgba(" + b.rgb + "," + (0.26 * a) + ")");
-      grad.addColorStop(0.7, "rgba(" + b.rgb + "," + (0.12 * a) + ")");
+      grad.addColorStop(0, "rgba(" + b.rgb + "," + (0.22 * a) + ")");
+      grad.addColorStop(0.35, "rgba(" + b.rgb + "," + (0.15 * a) + ")");
+      grad.addColorStop(0.7, "rgba(" + b.rgb + "," + (0.07 * a) + ")");
       grad.addColorStop(1, "rgba(" + b.rgb + ",0)");
       glowCtx.fillStyle = grad;
       glowCtx.beginPath();
@@ -355,6 +355,54 @@
 
     glowTex.needsUpdate = true;
   }
+
+  // ---------- people ----------
+  // Five poses. 0/1 are an idle pair for a crowd that has not heard yet,
+  // 2 is the arms coming up, 3/4 alternate as hands raised and waving.
+  var PERSON_POSES = [
+    [[46, 80], [82, 80]],
+    [[40, 74], [88, 74]],
+    [[26, 54], [102, 54]],
+    [[34, 14], [94, 14]],
+    [[22, 6], [106, 6]]
+  ];
+
+  function buildPersonTexture(pose) {
+    var c = document.createElement("canvas");
+    c.width = c.height = 128;
+    var g = c.getContext("2d");
+    g.lineCap = "round";
+    g.lineJoin = "round";
+    var arms = PERSON_POSES[pose];
+
+    function figure() {
+      g.beginPath(); g.arc(64, 20, 13, 0, Math.PI * 2); g.fill();
+      g.beginPath();
+      g.moveTo(64, 34); g.lineTo(64, 76);   // torso
+      g.moveTo(64, 76); g.lineTo(50, 122);  // legs
+      g.moveTo(64, 76); g.lineTo(78, 122);
+      g.moveTo(64, 44); g.lineTo(arms[0][0], arms[0][1]);
+      g.moveTo(64, 44); g.lineTo(arms[1][0], arms[1][1]);
+      g.stroke();
+    }
+
+    // dark halo first so a figure reads against pale desert or dark sea
+    g.strokeStyle = "rgba(0,0,0,0.6)";
+    g.fillStyle = "rgba(0,0,0,0.6)";
+    g.lineWidth = 20;
+    figure();
+
+    g.strokeStyle = "#ffffff";
+    g.fillStyle = "#ffffff";
+    g.lineWidth = 12;
+    figure();
+
+    var tex = new THREE.CanvasTexture(c);
+    tex.minFilter = THREE.LinearFilter;
+    return tex;
+  }
+
+  var PERSON_FRAMES = PERSON_POSES.map(function (_, i) { return buildPersonTexture(i); });
 
   // soft round marker for each city
   function buildNodeTexture() {
@@ -379,6 +427,7 @@
   // label per place, or they stack into a bright smear and doubled text
   var placeMarks = {};
   var nodeSprites = [];
+  var crowdSoFar = {};
 
   EVENTS.forEach(function (ev, i) {
     var basePos = latLonToVector3(ev.lat, ev.lon, GLOBE_R);
@@ -395,6 +444,51 @@
             Math.round(catColor.b * 255)].join(","),
       progress: 0, triggered: false, startTime: 0
     };
+
+    var up = Math.abs(normal.y) > 0.95 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+    var tangentA = new THREE.Vector3().crossVectors(normal, up).normalize();
+    var tangentB = new THREE.Vector3().crossVectors(normal, tangentA).normalize();
+
+    // The crowd: one figure per unit of response. A city visited more than
+    // once keeps its earlier crowd and rings the new arrivals around it, so
+    // Jerusalem grows outward instead of piling 90 figures on one spot.
+    var count = growth.count;
+    var crowdKey = ev.lat.toFixed(3) + "," + ev.lon.toFixed(3);
+    var prior = crowdSoFar[crowdKey] || 0;
+    crowdSoFar[crowdKey] = prior + count;
+    var spacing = GLOBE_R * 0.0075;
+    var rInner = spacing * Math.sqrt(prior);
+    var rOuter = spacing * Math.sqrt(prior + count);
+
+    var people = [];
+    var rnd = seededRandom(i * 131 + 7);
+    for (var p = 0; p < count; p++) {
+      var ang = rnd() * Math.PI * 2;
+      // even density across the ring, not bunched at its inner edge
+      var rad = Math.sqrt(rInner * rInner + rnd() * (rOuter * rOuter - rInner * rInner));
+      var ground = basePos.clone()
+        .add(normal.clone().multiplyScalar(0.008))
+        .add(tangentA.clone().multiplyScalar(Math.cos(ang) * rad))
+        .add(tangentB.clone().multiplyScalar(Math.sin(ang) * rad));
+
+      var pMat = new THREE.SpriteMaterial({
+        map: PERSON_FRAMES[0], color: GRAY.clone(),
+        transparent: true, depthWrite: false
+      });
+      var pSprite = new THREE.Sprite(pMat);
+      pSprite.center.set(0.5, 0); // pivot at the feet, so they stand and lean
+      pSprite.position.copy(ground);
+      scene.add(pSprite);
+
+      people.push({
+        sprite: pSprite, mat: pMat, ground: ground, frame: 0,
+        delay: rnd() * 0.9,                  // stagger so a crowd turns in a ripple
+        phase: rnd() * Math.PI * 2,          // everyone moves on their own beat
+        speed: 0.7 + rnd() * 0.8,
+        sway: 0.05 + rnd() * 0.07,
+        waveRate: 3.4 + rnd() * 2.6
+      });
+    }
 
     var key = ev.lat.toFixed(3) + "," + ev.lon.toFixed(3);
     var mark = placeMarks[key];
@@ -440,6 +534,7 @@
     markers.push({
       basePos: basePos, normal: normal,
       bloom: bloom,
+      crowd: { people: people, targetColor: catColor, triggered: false, startTime: 0 },
       node: { mat: mark.nodeMat, targetColor: catColor },
       ring: { mesh: ring, baseScale: baseRingScale, triggered: false, startTime: 0 },
       label: { div: mark.div }
@@ -487,6 +582,7 @@
     var m = markers[i];
     var now = performance.now();
     if (!m.bloom.triggered) { m.bloom.triggered = true; m.bloom.startTime = now; }
+    if (!m.crowd.triggered) { m.crowd.triggered = true; m.crowd.startTime = now; }
     if (!m.ring.triggered) { m.ring.triggered = true; m.ring.startTime = now; }
     m.label.div.classList.add("reached");
     if (arcs[i] && !arcs[i].triggered) { arcs[i].triggered = true; arcs[i].startTime = now; arcs[i].travel.visible = true; }
@@ -498,6 +594,11 @@
   function unrevealAll() {
     markers.forEach(function (m) {
       m.bloom.triggered = false; m.bloom.progress = 0;
+      m.crowd.triggered = false;
+      m.crowd.people.forEach(function (person) {
+        person.mat.color.copy(GRAY);
+        person.colourDone = false;
+      });
       m.node.mat.color.copy(GRAY);
       m.node.mat.opacity = 0.55;
       m.ring.triggered = false; m.ring.mesh.material.opacity = 0; m.ring.mesh.visible = false;
@@ -626,6 +727,49 @@
   // ---------- animation loop ----------
   var clock = new THREE.Clock();
 
+  // Everyone is always moving: a slow lean before the gospel arrives, then a
+  // faster bob with hands waving once they believe. Each has their own phase,
+  // so the crowd never moves as one block.
+  function updatePeople(now) {
+    var t = now * 0.001;
+    markers.forEach(function (m) {
+      var c = m.crowd;
+      var elapsed = c.triggered ? now - c.startTime : -1;
+      c.people.forEach(function (person) {
+        var turn = c.triggered
+          ? clamp((elapsed - person.delay * 900) / 650, 0, 1)
+          : 0;
+        var believer = turn >= 1;
+
+        // colour only needs writing while it is still changing
+        if (c.triggered && !person.colourDone) {
+          person.mat.color.copy(GRAY).lerp(c.targetColor, easeInOutCubic(turn));
+          if (believer) person.colourDone = true;
+        }
+
+        var beat = t * person.speed * (believer ? 2.1 : 1) + person.phase;
+        person.mat.rotation = Math.sin(beat) * person.sway * (believer ? 1.5 : 1);
+
+        var lift = believer ? 0.16 : 0.05;
+        var bob = Math.abs(Math.sin(beat)) * lift;
+        if (turn > 0 && turn < 1) bob += Math.sin(turn * Math.PI) * 0.35; // the hop as hands go up
+        person.sprite.position.copy(person.ground)
+          .addScaledVector(m.normal, bob * personHeight);
+
+        var frame;
+        if (turn === 0) frame = Math.sin(t * 0.55 * person.speed + person.phase) > 0 ? 0 : 1;
+        else if (turn < 0.45) frame = 2;
+        else if (turn < 1) frame = 3;
+        else frame = Math.sin(t * person.waveRate + person.phase) > 0 ? 3 : 4;
+
+        if (frame !== person.frame) {
+          person.frame = frame;
+          person.mat.map = PERSON_FRAMES[frame];
+        }
+      });
+    });
+  }
+
   function updateGlow(now) {
     var animating = false;
     markers.forEach(function (m) {
@@ -648,6 +792,7 @@
   // markers and rings are sized in world units, so they are rescaled as the
   // camera closes in — otherwise a single marker swallows the screen
   var zoomRingFactor = 1;
+  var personHeight = 0.03;
   var lastAlt = -1;
 
   function updateZoomScale() {
@@ -656,8 +801,16 @@
     if (Math.abs(alt - lastAlt) < 0.002) return;
     lastAlt = alt;
     glowSprite.material.opacity = clamp((alt - 1.1) / 2.8, 0, 1);
-    var nodeSize = clamp(alt * 0.021, 0.013, 0.11);
+    var nodeSize = clamp(alt * 0.018, 0.011, 0.09);
     nodeSprites.forEach(function (s) { s.scale.set(nodeSize, nodeSize, 1); });
+
+    personHeight = clamp(alt * 0.027, 0.016, 0.14);
+    var w = personHeight * 0.8;
+    markers.forEach(function (m) {
+      m.crowd.people.forEach(function (person) {
+        person.sprite.scale.set(w, personHeight, 1);
+      });
+    });
   }
 
   function updateRings(now) {
@@ -715,6 +868,7 @@
     clock.getDelta();
 
     updateZoomScale();
+    updatePeople(now);
     updateGlow(now);
     updateRings(now);
     updateArcs(now);
