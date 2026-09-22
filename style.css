@@ -70,6 +70,69 @@ html, body{
     1px 1px 2px rgba(0,0,0,0.95), -1px -1px 2px rgba(0,0,0,0.95);
 }
 
+/* region names sit under the city labels in the visual hierarchy: wider,
+   lighter, uppercase, the way a printed map sets a country against a town */
+.region-label{
+  font-family: 'Inter', sans-serif;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+  color: rgba(244, 231, 203, 0.82);
+  text-shadow:
+    0 0 3px rgba(0,0,0,0.95), 0 0 7px rgba(0,0,0,0.85),
+    1px 1px 2px rgba(0,0,0,0.9), -1px -1px 2px rgba(0,0,0,0.9);
+  transition: opacity 0.35s ease;
+}
+.region-label.modern{
+  color: rgba(214, 226, 240, 0.8);
+  letter-spacing: 0.16em;
+}
+.region-label.minor{
+  font-size: 9.5px;
+  color: rgba(238, 226, 200, 0.62);
+}
+.region-label.modern.minor{ color: rgba(206, 219, 234, 0.6); }
+
+/* `visibility` rather than `display`: CSS2DRenderer rewrites display itself
+   every frame, so anything set there is lost */
+.region-label.off{ opacity: 0; visibility: hidden; }
+.region-label.behind,
+.city-label.behind{ visibility: hidden; }
+
+.legend-sub{
+  margin: 12px 0 6px;
+  font-family: 'Cinzel', serif;
+  font-size: 12px;
+  color: var(--gold);
+  letter-spacing: 0.04em;
+}
+#era-switch{
+  display: flex;
+  gap: 4px;
+}
+#era-switch button{
+  flex: 1;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--panel-border);
+  color: var(--text-dim);
+  font-family: 'Inter', sans-serif;
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  padding: 5px 2px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+#era-switch button:hover{ background: rgba(224,165,68,0.16); color: var(--text-main); }
+#era-switch button.active{
+  background: rgba(224,165,68,0.26);
+  color: #f6e9cd;
+  border-color: rgba(224,165,68,0.5);
+}
+
 #app-header{
   position: fixed;
   top: 0; left: 0; right: 0;

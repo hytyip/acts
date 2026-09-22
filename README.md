@@ -23,6 +23,10 @@ server required (Three.js loads from a CDN via plain `<script>` tags).
   zoom, where individual figures are too small to read.
 - A city visited more than once keeps its earlier crowd and rings the new
   arrivals around it, so Jerusalem visibly grows outward.
+- Place names come in two layers, switched from the key: **Acts era** names
+  the Roman provinces the text itself uses (Asia, Macedonia, Galatia, Judea),
+  **Today** names the modern countries in the same places. Minor names appear
+  only once you are zoomed in close enough for them not to crowd each other.
 - Glowing arcs trace the missionary journeys between stops.
 - Hit play to auto-advance through the whole narrative.
 

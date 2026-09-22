@@ -488,6 +488,49 @@
     glowDirty = true;
   }
 
+  // ---------- region names ----------
+  var regionLabels = [];
+  REGIONS.forEach(function (r) {
+    var div = document.createElement("div");
+    div.className = "region-label"
+      + (r.era === "modern" ? " modern" : "")
+      + (r.rank === 2 ? " minor" : "");
+    div.textContent = r.name;
+    var obj = new THREE.CSS2DObject(div);
+    var pos = latLonToVector3(r.lat, r.lon, GLOBE_R * 1.002);
+    obj.position.copy(pos);
+    scene.add(obj);
+    regionLabels.push({ div: div, pos: pos, era: r.era, rank: r.rank });
+  });
+
+  var labelEra = "roman";
+  var HORIZON = GLOBE_R * GLOBE_R;
+
+  // CSS2D labels have no depth, so without this the far side of the globe
+  // shows its names through the Earth
+  function updateLabelVisibility() {
+    var alt = camera.position.length() - GLOBE_R;
+    var crowded = alt > 2.4;
+    regionLabels.forEach(function (l) {
+      var wanted = l.era === labelEra && (l.rank === 1 || !crowded);
+      var front = l.pos.dot(camera.position) > HORIZON;
+      l.div.classList.toggle("off", !(wanted && front));
+    });
+    markers.forEach(function (m) {
+      m.label.div.classList.toggle("behind", m.basePos.dot(camera.position) <= HORIZON);
+    });
+  }
+
+  var eraSwitch = document.getElementById("era-switch");
+  eraSwitch.addEventListener("click", function (e) {
+    var btn = e.target.closest("button[data-era]");
+    if (!btn) return;
+    labelEra = btn.getAttribute("data-era");
+    Array.prototype.forEach.call(eraSwitch.querySelectorAll("button"), function (b) {
+      b.classList.toggle("active", b === btn);
+    });
+  });
+
   // ---------- info panel / UI ----------
   var elCategory = document.getElementById("info-category");
   var elStep = document.getElementById("info-step");
@@ -752,6 +795,7 @@
     clouds.rotation.y += CLOUD_DRIFT * dt;
 
     updateZoomScale();
+    updateLabelVisibility();
     updatePeople(now);
     updateGlow(now);
     updateRings(now);
