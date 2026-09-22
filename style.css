@@ -45,7 +45,11 @@ html, body{
   font-weight: 600;
   letter-spacing: 0.02em;
   color: rgba(180, 186, 200, 0.65);
-  text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+  /* satellite imagery runs from snow to dark sea, so labels carry their
+     own dark outline rather than relying on the terrain behind them */
+  text-shadow:
+    0 0 3px rgba(0,0,0,0.95), 0 0 6px rgba(0,0,0,0.85),
+    1px 1px 2px rgba(0,0,0,0.95), -1px -1px 2px rgba(0,0,0,0.95);
   white-space: nowrap;
   transform: translate(9px, -5px);
   opacity: 0;
@@ -60,7 +64,10 @@ html, body{
   opacity: 1;
   color: #ffffff;
   font-size: 13px;
-  text-shadow: 0 0 8px rgba(224, 165, 68, 0.65), 0 1px 3px rgba(0,0,0,0.9);
+  text-shadow:
+    0 0 4px rgba(0,0,0,0.98), 0 0 9px rgba(0,0,0,0.9),
+    0 0 14px rgba(224, 165, 68, 0.7),
+    1px 1px 2px rgba(0,0,0,0.95), -1px -1px 2px rgba(0,0,0,0.95);
 }
 
 #app-header{
@@ -68,9 +75,10 @@ html, body{
   top: 0; left: 0; right: 0;
   z-index: 10;
   text-align: center;
-  padding: 18px 16px 10px;
+  padding: 18px 16px 22px;
   pointer-events: none;
-  background: linear-gradient(to bottom, rgba(5,7,13,0.85), rgba(5,7,13,0));
+  background: linear-gradient(to bottom,
+    rgba(5,7,13,0.92) 0%, rgba(5,7,13,0.78) 45%, rgba(5,7,13,0) 100%);
 }
 #app-header h1{
   font-family: 'Cinzel', serif;
@@ -84,8 +92,9 @@ html, body{
 #app-header p{
   margin: 4px 0 0;
   font-size: clamp(11px, 1.4vw, 14px);
-  color: var(--text-dim);
+  color: #c3ccdb;
   letter-spacing: 0.02em;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.95), 0 0 10px rgba(0,0,0,0.8);
 }
 
 #legend-toggle{

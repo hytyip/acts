@@ -27,175 +27,25 @@
     return function () { s = (s * 9301 + 49297) % 233280; return s / 233280; };
   }
 
-  // ---------- world texture from real geography ----------
-  // WORLD_LAND / WORLD_RIVERS / WORLD_LAKES: Natural Earth 1:50m, see worldmap.js
-  var TEX_W = 3072, TEX_H = 1536;
-
-  function px(lon) { return ((lon + 180) / 360) * TEX_W; }
-  function py(lat) { return ((90 - lat) / 180) * TEX_H; }
+  // ---------- coastline outline ----------
+  // The globe itself is satellite imagery; these polygons only supply the
+  // mask that keeps the spreading light on land. WORLD_LAND: Natural Earth
+  // 1:50m, see worldmap.js. Built directly in glow-texture pixel space.
+  var GLOW_W = 1024, GLOW_H = 512;
 
   function buildLandPath() {
     var path = new Path2D();
     WORLD_LAND.forEach(function (poly) {
       poly.forEach(function (ring) {
         for (var i = 0; i < ring.length; i += 2) {
-          if (i === 0) path.moveTo(px(ring[i]), py(ring[i + 1]));
-          else path.lineTo(px(ring[i]), py(ring[i + 1]));
+          var x = ((ring[i] + 180) / 360) * GLOW_W;
+          var y = ((90 - ring[i + 1]) / 180) * GLOW_H;
+          if (i === 0) path.moveTo(x, y); else path.lineTo(x, y);
         }
         path.closePath();
       });
     });
     return path;
-  }
-
-  // smooth value noise: random pixels at low res, upscaled with interpolation
-  function noiseCanvas(w, h, seed, lo, hi) {
-    var c = document.createElement("canvas");
-    c.width = w; c.height = h;
-    var cx = c.getContext("2d");
-    var img = cx.createImageData(w, h);
-    var rnd = seededRandom(seed);
-    for (var i = 0; i < w * h; i++) {
-      var v = lo + rnd() * (hi - lo);
-      img.data[i * 4] = v; img.data[i * 4 + 1] = v; img.data[i * 4 + 2] = v;
-      img.data[i * 4 + 3] = 255;
-    }
-    cx.putImageData(img, 0, 0);
-    return c;
-  }
-
-  function drawTerrainNoise(ctx, octaves) {
-    ctx.globalCompositeOperation = "overlay";
-    octaves.forEach(function (o) {
-      ctx.globalAlpha = o.alpha;
-      ctx.drawImage(noiseCanvas(o.w, o.h, o.seed, o.lo, o.hi), 0, 0, TEX_W, TEX_H);
-    });
-    ctx.globalAlpha = 1;
-    ctx.globalCompositeOperation = "source-over";
-  }
-
-  function buildEarthTexture(landPath) {
-    var canvas = document.createElement("canvas");
-    canvas.width = TEX_W; canvas.height = TEX_H;
-    var ctx = canvas.getContext("2d");
-
-    var oceanGrad = ctx.createLinearGradient(0, 0, 0, TEX_H);
-    oceanGrad.addColorStop(0, "#071526");
-    oceanGrad.addColorStop(0.5, "#0c2742");
-    oceanGrad.addColorStop(1, "#071526");
-    ctx.fillStyle = oceanGrad;
-    ctx.fillRect(0, 0, TEX_W, TEX_H);
-
-    // land is built on its own transparent layer, then masked back to the
-    // coastline so climate tint and terrain noise never bleed into the sea
-    var landCv = document.createElement("canvas");
-    landCv.width = TEX_W; landCv.height = TEX_H;
-    var lc = landCv.getContext("2d");
-
-    lc.fillStyle = "#3a3421";
-    lc.fill(landPath, "evenodd");
-
-    // climate banding: ice at the poles, temperate greens, arid sand belts
-    var climate = lc.createLinearGradient(0, 0, 0, TEX_H);
-    [[90, "rgba(196,206,216,0.30)"], [72, "rgba(150,165,175,0.16)"],
-     [58, "rgba(96,112,64,0.13)"],   [44, "rgba(108,120,58,0.15)"],
-     [33, "rgba(150,122,66,0.16)"],  [22, "rgba(164,132,70,0.20)"],
-     [12, "rgba(120,124,58,0.13)"],  [0,  "rgba(78,104,50,0.16)"],
-     [-14, "rgba(120,124,58,0.13)"], [-26, "rgba(160,130,70,0.19)"],
-     [-40, "rgba(104,116,58,0.14)"], [-58, "rgba(150,165,175,0.16)"],
-     [-90, "rgba(205,214,222,0.32)"]
-    ].forEach(function (stop) {
-      climate.addColorStop(clamp((90 - stop[0]) / 180, 0, 1), stop[1]);
-    });
-    lc.fillStyle = climate;
-    lc.fillRect(0, 0, TEX_W, TEX_H);
-
-    drawTerrainNoise(lc, [
-      { w: 220, h: 110, seed: 29, lo: 112, hi: 158, alpha: 0.35 },
-      { w: 620, h: 310, seed: 47, lo: 116, hi: 152, alpha: 0.28 }
-    ]);
-
-    // rivers, thicker for the major ones
-    lc.lineCap = "round";
-    lc.lineJoin = "round";
-    lc.strokeStyle = "rgba(96,148,186,0.85)";
-    WORLD_RIVERS.forEach(function (river) {
-      var pts = river[1];
-      lc.lineWidth = Math.max(1, 3.4 - river[0] * 0.3);
-      lc.beginPath();
-      for (var i = 0; i < pts.length; i += 2) {
-        if (i === 0) lc.moveTo(px(pts[i]), py(pts[i + 1]));
-        else lc.lineTo(px(pts[i]), py(pts[i + 1]));
-      }
-      lc.stroke();
-    });
-
-    lc.fillStyle = "#12395c";
-    WORLD_LAKES.forEach(function (ring) {
-      lc.beginPath();
-      for (var i = 0; i < ring.length; i += 2) {
-        if (i === 0) lc.moveTo(px(ring[i]), py(ring[i + 1]));
-        else lc.lineTo(px(ring[i]), py(ring[i + 1]));
-      }
-      lc.closePath();
-      lc.fill();
-    });
-
-    // clip everything drawn above back to the coastline
-    lc.globalCompositeOperation = "destination-in";
-    lc.fill(landPath, "evenodd");
-    lc.globalCompositeOperation = "source-over";
-
-    ctx.drawImage(landCv, 0, 0);
-
-    ctx.strokeStyle = "rgba(126,112,72,0.9)";
-    ctx.lineWidth = 2;
-    ctx.lineJoin = "round";
-    ctx.stroke(landPath);
-
-    // graticule over the whole map
-    ctx.strokeStyle = "rgba(160, 190, 220, 0.09)";
-    ctx.lineWidth = 1.5;
-    for (var lon = -180; lon <= 180; lon += 15) {
-      ctx.beginPath(); ctx.moveTo(px(lon), 0); ctx.lineTo(px(lon), TEX_H); ctx.stroke();
-    }
-    for (var lat = -75; lat <= 75; lat += 15) {
-      ctx.beginPath(); ctx.moveTo(0, py(lat)); ctx.lineTo(TEX_W, py(lat)); ctx.stroke();
-    }
-    ctx.strokeStyle = "rgba(190, 210, 235, 0.15)";
-    ctx.beginPath(); ctx.moveTo(0, py(0)); ctx.lineTo(TEX_W, py(0)); ctx.stroke();
-
-    var tex = new THREE.CanvasTexture(canvas);
-    tex.wrapS = THREE.RepeatWrapping;
-    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-    return tex;
-  }
-
-  // relief: flat over the sea, rumpled over land, so the light picks out terrain
-  function buildReliefTexture(landPath) {
-    var canvas = document.createElement("canvas");
-    canvas.width = TEX_W; canvas.height = TEX_H;
-    var ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#808080";
-    ctx.fillRect(0, 0, TEX_W, TEX_H);
-
-    var bumpCv = document.createElement("canvas");
-    bumpCv.width = TEX_W; bumpCv.height = TEX_H;
-    var bc = bumpCv.getContext("2d");
-    bc.fillStyle = "#808080";
-    bc.fill(landPath, "evenodd");
-    drawTerrainNoise(bc, [
-      { w: 260, h: 130, seed: 71, lo: 96, hi: 168, alpha: 0.6 },
-      { w: 700, h: 350, seed: 83, lo: 110, hi: 152, alpha: 0.45 }
-    ]);
-    bc.globalCompositeOperation = "destination-in";
-    bc.fill(landPath, "evenodd");
-
-    ctx.drawImage(bumpCv, 0, 0);
-
-    var tex = new THREE.CanvasTexture(canvas);
-    tex.wrapS = THREE.RepeatWrapping;
-    return tex;
   }
 
   // ---------- scene setup ----------
@@ -227,14 +77,22 @@
   controls.rotateSpeed = 0.5;
   controls.target.set(0, 0, 0);
 
-  // lighting
-  scene.add(new THREE.AmbientLight(0x4a5570, 1.05));
-  var sun = new THREE.DirectionalLight(0xfff0d6, 0.95);
-  sun.position.set(6, 4, 5);
+  // lighting. The sun trails the camera rather than sitting fixed in space,
+  // so whichever city the account has reached is in daylight; the offset
+  // keeps a terminator near the limb instead of flattening everything.
+  scene.add(new THREE.AmbientLight(0x4a5570, 0.72));
+  var sun = new THREE.DirectionalLight(0xfff4e2, 1.25);
   scene.add(sun);
-  var rim = new THREE.DirectionalLight(0x3a5fa0, 0.5);
+  var rim = new THREE.DirectionalLight(0x3a5fa0, 0.45);
   rim.position.set(-6, -2, -4);
   scene.add(rim);
+
+  var SUN_AXIS = new THREE.Vector3(0, 1, 0);
+  function updateSun() {
+    var dir = camera.position.clone().normalize().applyAxisAngle(SUN_AXIS, 0.6);
+    dir.y += 0.3;
+    sun.position.copy(dir.normalize().multiplyScalar(12));
+  }
 
   // starfield
   (function buildStars() {
@@ -273,22 +131,46 @@
     scene.add(glowSprite);
   })();
 
-  // globe
-  var globeGeo = new THREE.SphereGeometry(GLOBE_R, 96, 96);
+  // globe: NASA Blue Marble imagery, with a water mask for ocean sheen and a
+  // normal map for terrain relief. Held slightly under full brightness so the
+  // crowds and the spreading light still read against it.
+  var texLoader = new THREE.TextureLoader();
   var landPath = buildLandPath();
-  var globeMat = new THREE.MeshPhongMaterial({
-    map: buildEarthTexture(landPath),
-    bumpMap: buildReliefTexture(landPath),
-    bumpScale: 0.009,
-    shininess: 4,
-    specular: 0x101820
-  });
-  var globe = new THREE.Mesh(globeGeo, globeMat);
+
+  var earthMap = texLoader.load(TEXTURES.earth);
+  earthMap.anisotropy = renderer.capabilities.getMaxAnisotropy();
+
+  var globe = new THREE.Mesh(
+    new THREE.SphereGeometry(GLOBE_R, 128, 128),
+    new THREE.MeshPhongMaterial({
+      map: earthMap,
+      specularMap: texLoader.load(TEXTURES.specular),
+      normalMap: texLoader.load(TEXTURES.normal),
+      normalScale: new THREE.Vector2(0.55, 0.55),
+      color: 0xb9bec4,
+      specular: 0x2d3d4f,
+      shininess: 15
+    })
+  );
   scene.add(globe);
 
+  // a thin veil of cloud, drifting
+  var clouds = new THREE.Mesh(
+    new THREE.SphereGeometry(GLOBE_R * 1.004, 96, 96),
+    new THREE.MeshPhongMaterial({
+      alphaMap: texLoader.load(TEXTURES.clouds),
+      color: 0xffffff, transparent: true, opacity: 0.38,
+      depthWrite: false
+    })
+  );
+  scene.add(clouds);
+
   var atmosphere = new THREE.Mesh(
-    new THREE.SphereGeometry(GLOBE_R * 1.015, 48, 48),
-    new THREE.MeshBasicMaterial({ color: 0x6fa8ff, transparent: true, opacity: 0.06, side: THREE.BackSide })
+    new THREE.SphereGeometry(GLOBE_R * 1.02, 64, 64),
+    new THREE.MeshBasicMaterial({
+      color: 0x6fa8ff, transparent: true, opacity: 0.1,
+      side: THREE.BackSide, depthWrite: false
+    })
   );
   scene.add(atmosphere);
 
@@ -296,7 +178,6 @@
   // A transparent shell over the globe. Each city that hears the gospel
   // blooms a coloured glow into the land around it; neighbouring blooms
   // run together, so the lit region grows as the account moves outward.
-  var GLOW_W = 1024, GLOW_H = 512;
   var glowCanvas = document.createElement("canvas");
   glowCanvas.width = GLOW_W; glowCanvas.height = GLOW_H;
   var glowCtx = glowCanvas.getContext("2d");
@@ -306,8 +187,9 @@
   var glowShell = new THREE.Mesh(
     new THREE.SphereGeometry(GLOBE_R * 1.0015, 96, 96),
     new THREE.MeshBasicMaterial({
-      map: glowTex, transparent: true,
-      blending: THREE.AdditiveBlending, depthWrite: false
+      // tints the imagery rather than adding to it — added light barely
+      // registers on bright desert and snow
+      map: glowTex, transparent: true, depthWrite: false
     })
   );
   scene.add(glowShell);
@@ -347,10 +229,7 @@
     // that gradient instead, which leaves ghost rings out over the water.
     glowCtx.globalCompositeOperation = "destination-in";
     glowCtx.fillStyle = "#ffffff";
-    glowCtx.save();
-    glowCtx.scale(GLOW_W / TEX_W, GLOW_H / TEX_H);
     glowCtx.fill(landPath, "evenodd");
-    glowCtx.restore();
     glowCtx.globalCompositeOperation = "source-over";
 
     glowTex.needsUpdate = true;
@@ -862,10 +741,15 @@
     if (t >= 1) { camTween = null; controls.enabled = true; }
   }
 
+  var CLOUD_DRIFT = 0.004; // radians per second
+
   function animate() {
     requestAnimationFrame(animate);
     var now = performance.now();
-    clock.getDelta();
+    var dt = clock.getDelta();
+
+    updateSun();
+    clouds.rotation.y += CLOUD_DRIFT * dt;
 
     updateZoomScale();
     updatePeople(now);

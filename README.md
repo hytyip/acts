@@ -27,11 +27,17 @@ server required (Three.js loads from a CDN via plain `<script>` tags).
 - Hit play to auto-advance through the whole narrative.
 
 Files: `index.html`, `style.css`, `data.js` (the 16 Acts events/coordinates),
-`worldmap.js` (coastlines, rivers and lakes), `main.js` (the Three.js scene,
-globe texture, and timeline logic).
+`textures.js` (the Earth imagery), `worldmap.js` (coastline outline),
+`main.js` (the Three.js scene and timeline logic).
 
-Geography is Natural Earth 1:50m, public domain: land polygons via the
-`world-atlas` project, rivers and lakes via `natural-earth-vector`. The globe
-texture is drawn at runtime — coastlines, river network, lakes, climate
-banding and a relief bump map — so every city sits at its true
-latitude/longitude on real terrain.
+The globe is NASA Blue Marble satellite imagery (public domain) with a water
+mask for ocean sheen, a normal map for terrain relief, a drifting cloud layer
+and an atmosphere rim. The sun follows the camera, so whichever city the
+account has reached is in daylight. Cities sit at their true
+latitude/longitude on real geography.
+
+The imagery is embedded in `textures.js` as data URIs rather than kept as
+image files. Browsers refuse to load image files into WebGL from a `file://`
+page, so inlining them is what lets you open `index.html` by double-click with
+no server. Coastline polygons (Natural Earth 1:50m, via `world-atlas`) are
+kept only to hold the spreading light to the land.
