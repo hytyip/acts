@@ -292,112 +292,157 @@
   );
   scene.add(atmosphere);
 
-  // ---------- people ----------
-  // three poses: arms down (not yet reached), arms lifting, hands raised
-  function buildPersonTexture(pose) {
-    var S = 128;
-    var c = document.createElement("canvas");
-    c.width = S; c.height = S;
-    var g = c.getContext("2d");
-    g.lineCap = "round";
-    g.lineJoin = "round";
+  // ---------- the spreading light ----------
+  // A transparent shell over the globe. Each city that hears the gospel
+  // blooms a coloured glow into the land around it; neighbouring blooms
+  // run together, so the lit region grows as the account moves outward.
+  var GLOW_W = 1024, GLOW_H = 512;
+  var glowCanvas = document.createElement("canvas");
+  glowCanvas.width = GLOW_W; glowCanvas.height = GLOW_H;
+  var glowCtx = glowCanvas.getContext("2d");
+  var glowTex = new THREE.CanvasTexture(glowCanvas);
+  var glowDirty = true;
 
-    var arms = [
-      [[46, 82], [82, 82]],  // down at the sides
-      [[28, 52], [100, 52]], // lifting outward
-      [[30, 12], [98, 12]]   // raised high
-    ][pose];
+  var glowShell = new THREE.Mesh(
+    new THREE.SphereGeometry(GLOBE_R * 1.0015, 96, 96),
+    new THREE.MeshBasicMaterial({
+      map: glowTex, transparent: true,
+      blending: THREE.AdditiveBlending, depthWrite: false
+    })
+  );
+  scene.add(glowShell);
 
-    function figure() {
-      g.beginPath(); g.arc(64, 22, 12.5, 0, Math.PI * 2); g.fill();
-      g.beginPath();
-      g.moveTo(64, 36); g.lineTo(64, 78);          // torso
-      g.moveTo(64, 78); g.lineTo(50, 124);         // legs
-      g.moveTo(64, 78); g.lineTo(78, 124);
-      g.moveTo(64, 46); g.lineTo(arms[0][0], arms[0][1]);
-      g.moveTo(64, 46); g.lineTo(arms[1][0], arms[1][1]);
-      g.stroke();
-    }
+  function paintGlow() {
+    glowCtx.clearRect(0, 0, GLOW_W, GLOW_H);
+    // painted oldest first with plain alpha, never additively: stacked blooms
+    // would saturate to white, and the newest light should read on top
+    markers.forEach(function (m) {
+      var b = m.bloom;
+      if (b.progress <= 0) return;
+      var cx = ((b.lon + 180) / 360) * GLOW_W;
+      var cy = ((90 - b.lat) / 180) * GLOW_H;
+      var r = b.radius * b.progress;
+      // equirectangular stretches east-west with latitude; undo it so the
+      // glow stays circular on the globe instead of squashing toward the pole
+      var stretch = 1 / Math.max(0.2, Math.cos(b.lat * Math.PI / 180));
 
-    // dark halo first so the figure reads against pale desert or sea
-    g.strokeStyle = "rgba(0,0,0,0.55)";
-    g.fillStyle = "rgba(0,0,0,0.55)";
-    g.lineWidth = 18;
-    figure();
+      glowCtx.save();
+      glowCtx.translate(cx, cy);
+      glowCtx.scale(stretch, 1);
+      var grad = glowCtx.createRadialGradient(0, 0, 0, 0, 0, r);
+      var a = b.progress;
+      grad.addColorStop(0, "rgba(" + b.rgb + "," + (0.40 * a) + ")");
+      grad.addColorStop(0.35, "rgba(" + b.rgb + "," + (0.26 * a) + ")");
+      grad.addColorStop(0.7, "rgba(" + b.rgb + "," + (0.12 * a) + ")");
+      grad.addColorStop(1, "rgba(" + b.rgb + ",0)");
+      glowCtx.fillStyle = grad;
+      glowCtx.beginPath();
+      glowCtx.arc(0, 0, r, 0, Math.PI * 2);
+      glowCtx.fill();
+      glowCtx.restore();
+    });
 
-    g.strokeStyle = "#ffffff";
-    g.fillStyle = "#ffffff";
-    g.lineWidth = 11;
-    figure();
+    // keep the light on the land so the sea stays dark. The mask has to be a
+    // solid fill — leaving the last bloom's gradient as fillStyle masks with
+    // that gradient instead, which leaves ghost rings out over the water.
+    glowCtx.globalCompositeOperation = "destination-in";
+    glowCtx.fillStyle = "#ffffff";
+    glowCtx.save();
+    glowCtx.scale(GLOW_W / TEX_W, GLOW_H / TEX_H);
+    glowCtx.fill(landPath, "evenodd");
+    glowCtx.restore();
+    glowCtx.globalCompositeOperation = "source-over";
 
-    var tex = new THREE.CanvasTexture(c);
-    tex.minFilter = THREE.LinearFilter;
-    return tex;
+    glowTex.needsUpdate = true;
   }
 
-  var PERSON_FRAMES = [buildPersonTexture(0), buildPersonTexture(1), buildPersonTexture(2)];
+  // soft round marker for each city
+  function buildNodeTexture() {
+    var c = document.createElement("canvas");
+    c.width = c.height = 64;
+    var g = c.getContext("2d");
+    var grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, "rgba(255,255,255,1)");
+    grad.addColorStop(0.35, "rgba(255,255,255,0.9)");
+    grad.addColorStop(0.55, "rgba(255,255,255,0.35)");
+    grad.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 64, 64);
+    return new THREE.CanvasTexture(c);
+  }
+  var NODE_TEX = buildNodeTexture();
 
   // ---------- markers ----------
   var markers = [];
   var arcs = [];
+  // Jerusalem and Caesarea each carry several events; one marker and one
+  // label per place, or they stack into a bright smear and doubled text
+  var placeMarks = {};
+  var nodeSprites = [];
 
   EVENTS.forEach(function (ev, i) {
     var basePos = latLonToVector3(ev.lat, ev.lon, GLOBE_R);
     var normal = basePos.clone().normalize();
-    var up = Math.abs(normal.y) > 0.95 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
-    var tangentA = new THREE.Vector3().crossVectors(normal, up).normalize();
-    var tangentB = new THREE.Vector3().crossVectors(normal, tangentA).normalize();
 
     var growth = GROWTH[ev.growth];
     var catColor = new THREE.Color(CATEGORIES[ev.category].color);
-    var count = growth.count;
-    // spread the crowd with its size so density stays even from town to city
-    var discR = GLOBE_R * 0.0052 * Math.sqrt(count);
 
-    var people = [];
-    var rnd = seededRandom(i * 131 + 7);
-    for (var p = 0; p < count; p++) {
-      var ang = rnd() * Math.PI * 2;
-      var rad = Math.sqrt(rnd()) * discR;
-      var offset = tangentA.clone().multiplyScalar(Math.cos(ang) * rad)
-        .add(tangentB.clone().multiplyScalar(Math.sin(ang) * rad));
-      var ground = basePos.clone().add(normal.clone().multiplyScalar(0.008)).add(offset);
+    // how far the light carries is set by the scale of the response
+    var bloom = {
+      lat: ev.lat, lon: ev.lon,
+      radius: (2.4 + growth.scale * 3.6) * (GLOW_W / 360),
+      rgb: [Math.round(catColor.r * 255), Math.round(catColor.g * 255),
+            Math.round(catColor.b * 255)].join(","),
+      progress: 0, triggered: false, startTime: 0
+    };
 
-      var mat = new THREE.SpriteMaterial({
-        map: PERSON_FRAMES[0], color: GRAY.clone(),
-        transparent: true, depthWrite: false
+    var key = ev.lat.toFixed(3) + "," + ev.lon.toFixed(3);
+    var mark = placeMarks[key];
+    if (!mark) {
+      // city marker: dim until the gospel arrives, then lit in its colour
+      var nodeMat = new THREE.SpriteMaterial({
+        map: NODE_TEX, color: GRAY.clone(), transparent: true,
+        opacity: 0.55, depthWrite: false
       });
-      var sprite = new THREE.Sprite(mat);
-      sprite.center.set(0.5, 0); // anchor at the feet so they stand on the ground
-      sprite.position.copy(ground);
-      scene.add(sprite);
+      var node = new THREE.Sprite(nodeMat);
+      node.position.copy(basePos.clone().add(normal.clone().multiplyScalar(0.006)));
+      scene.add(node);
 
-      people.push({ sprite: sprite, mat: mat, ground: ground, delay: rnd() * 0.9, frame: 0 });
+      var div = document.createElement("div");
+      div.className = "city-label";
+      div.textContent = ev.place;
+      var labelObj = new THREE.CSS2DObject(div);
+      labelObj.position.copy(basePos.clone().add(normal.clone().multiplyScalar(0.03)));
+      scene.add(labelObj);
+
+      mark = { node: node, nodeMat: nodeMat, div: div };
+      placeMarks[key] = mark;
+      nodeSprites.push(node);
     }
 
-    // pulse ring
+    // ripple marking arrival — additive so it reads as light on lit ground
     var ring = new THREE.Mesh(
-      new THREE.RingGeometry(0.88, 1, 56),
-      new THREE.MeshBasicMaterial({ color: catColor, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false })
+      new THREE.RingGeometry(0.93, 1, 64),
+      new THREE.MeshBasicMaterial({
+        color: catColor, transparent: true, opacity: 0,
+        side: THREE.DoubleSide, depthWrite: false,
+        blending: THREE.AdditiveBlending
+      })
     );
     ring.position.copy(basePos.clone().add(normal.clone().multiplyScalar(0.02)));
     ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
-    var baseRingScale = GLOBE_R * 0.05 * (0.8 + growth.scale);
+    var baseRingScale = GLOBE_R * 0.038 * (0.8 + growth.scale);
+    ring.scale.setScalar(0.001);
+    ring.visible = false; // until this city is reached; a ring left at its
+    ring.renderOrder = 2; // default scale is half a globe wide
     scene.add(ring);
-
-    // label
-    var div = document.createElement("div");
-    div.className = "city-label";
-    div.textContent = ev.place;
-    var labelObj = new THREE.CSS2DObject(div);
-    labelObj.position.copy(basePos.clone().add(normal.clone().multiplyScalar(0.03)));
-    scene.add(labelObj);
 
     markers.push({
       basePos: basePos, normal: normal,
-      cluster: { people: people, targetColor: catColor, triggered: false, done: false, startTime: 0 },
+      bloom: bloom,
+      node: { mat: mark.nodeMat, targetColor: catColor },
       ring: { mesh: ring, baseScale: baseRingScale, triggered: false, startTime: 0 },
-      label: { div: div }
+      label: { div: mark.div }
     });
 
     if (i > 0) {
@@ -441,7 +486,7 @@
   function revealStep(i) {
     var m = markers[i];
     var now = performance.now();
-    if (!m.cluster.triggered) { m.cluster.triggered = true; m.cluster.done = false; m.cluster.startTime = now; }
+    if (!m.bloom.triggered) { m.bloom.triggered = true; m.bloom.startTime = now; }
     if (!m.ring.triggered) { m.ring.triggered = true; m.ring.startTime = now; }
     m.label.div.classList.add("reached");
     if (arcs[i] && !arcs[i].triggered) { arcs[i].triggered = true; arcs[i].startTime = now; arcs[i].travel.visible = true; }
@@ -452,19 +497,15 @@
 
   function unrevealAll() {
     markers.forEach(function (m) {
-      m.cluster.triggered = false; m.cluster.done = false;
-      m.cluster.people.forEach(function (person) {
-        person.mat.color.copy(GRAY);
-        person.mat.map = PERSON_FRAMES[0];
-        person.mat.needsUpdate = true;
-        person.frame = 0;
-        person.sprite.position.copy(person.ground);
-      });
-      m.ring.triggered = false; m.ring.mesh.material.opacity = 0;
+      m.bloom.triggered = false; m.bloom.progress = 0;
+      m.node.mat.color.copy(GRAY);
+      m.node.mat.opacity = 0.55;
+      m.ring.triggered = false; m.ring.mesh.material.opacity = 0; m.ring.mesh.visible = false;
       m.label.div.classList.remove("reached", "current");
     });
     arcs.forEach(function (a) { if (!a) return; a.triggered = false; a.line.material.opacity = 0; a.travel.visible = false; });
     maxRevealed = -1;
+    glowDirty = true;
   }
 
   // ---------- info panel / UI ----------
@@ -509,9 +550,9 @@
   }
 
   function updateCurrentLabelClass() {
-    markers.forEach(function (m, idx) {
-      m.label.div.classList.toggle("current", idx === currentStep);
-    });
+    // labels are shared between events at the same place, so clear first
+    markers.forEach(function (m) { m.label.div.classList.remove("current"); });
+    markers[currentStep].label.div.classList.add("current");
   }
 
   var STEP_ZOOM_R = 3.15; // close enough to read the map around each city
@@ -585,36 +626,28 @@
   // ---------- animation loop ----------
   var clock = new THREE.Clock();
 
-  function updateClusters(now) {
+  function updateGlow(now) {
+    var animating = false;
     markers.forEach(function (m) {
-      var c = m.cluster;
-      if (!c.triggered || c.done) return;
-      var allDone = true;
-      var elapsedBase = now - c.startTime;
-      c.people.forEach(function (person) {
-        var t = clamp((elapsedBase - person.delay * 900) / 650, 0, 1);
-        if (t < 1) allDone = false;
-        var te = easeInOutCubic(t);
-        person.mat.color.copy(GRAY).lerp(c.targetColor, te);
+      var b = m.bloom;
+      if (!b.triggered) return;
+      var t = clamp((now - b.startTime) / 1600, 0, 1);
+      var eased = easeOutQuad(t);
+      if (eased !== b.progress) { b.progress = eased; animating = true; }
 
-        // hands come up as the colour takes, with a small hop off the ground
-        var frame = t === 0 ? 0 : (t < 0.45 ? 1 : 2);
-        if (frame !== person.frame) {
-          person.frame = frame;
-          person.mat.map = PERSON_FRAMES[frame];
-          person.mat.needsUpdate = true;
-        }
-        person.sprite.position.copy(person.ground)
-          .addScaledVector(m.normal, Math.sin(t * Math.PI) * personHeight * 0.3);
-      });
-      if (allDone) c.done = true;
+      // the city marker lights up with the land around it
+      m.node.mat.color.copy(GRAY).lerp(m.node.targetColor, easeInOutCubic(clamp(t * 2.5, 0, 1)));
+      m.node.mat.opacity = 0.55 + 0.45 * easeInOutCubic(clamp(t * 2.5, 0, 1));
     });
+    if (animating || glowDirty) {
+      paintGlow();
+      glowDirty = false;
+    }
   }
 
-  // people and rings are sized in world units, so they are rescaled as the
+  // markers and rings are sized in world units, so they are rescaled as the
   // camera closes in — otherwise a single marker swallows the screen
   var zoomRingFactor = 1;
-  var personHeight = 0.02;
   var lastAlt = -1;
 
   function updateZoomScale() {
@@ -623,27 +656,25 @@
     if (Math.abs(alt - lastAlt) < 0.002) return;
     lastAlt = alt;
     glowSprite.material.opacity = clamp((alt - 1.1) / 2.8, 0, 1);
-    personHeight = clamp(alt * 0.016, 0.010, 0.09);
-    var w = personHeight * 0.78;
-    markers.forEach(function (m) {
-      m.cluster.people.forEach(function (person) {
-        person.sprite.scale.set(w, personHeight, 1);
-      });
-    });
+    var nodeSize = clamp(alt * 0.021, 0.013, 0.11);
+    nodeSprites.forEach(function (s) { s.scale.set(nodeSize, nodeSize, 1); });
   }
 
   function updateRings(now) {
-    markers.forEach(function (m) {
+    markers.forEach(function (m, idx) {
       var r = m.ring;
       if (!r.triggered) return;
-      var period = 2200;
+      // the ripple marks arrival and the city being spoken about; everywhere
+      // else it settles down and leaves the spreading light to do the work
+      // exactly one ripple at a time, on the city being described — several
+      // at once read as grey smudges where they cross open water
+      if (idx !== currentStep) { r.mesh.visible = false; return; }
+      r.mesh.visible = true;
       var age = now - r.startTime;
-      var fadeIn = clamp(age / 500, 0, 1);
-      var phase = (age % period) / period;
+      var phase = (age % 2200) / 2200;
       var pe = easeOutQuad(phase);
-      var scale = r.baseScale * (0.4 + pe * 1.7) * zoomRingFactor;
-      r.mesh.scale.setScalar(scale);
-      r.mesh.material.opacity = (1 - pe) * 0.8 * fadeIn;
+      r.mesh.scale.setScalar(r.baseScale * (0.4 + pe * 1.7) * zoomRingFactor);
+      r.mesh.material.opacity = (1 - pe) * 0.75 * clamp(age / 500, 0, 1);
     });
   }
 
@@ -684,7 +715,7 @@
     clock.getDelta();
 
     updateZoomScale();
-    updateClusters(now);
+    updateGlow(now);
     updateRings(now);
     updateArcs(now);
     updateCameraTween(now);

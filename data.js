@@ -91,7 +91,7 @@ const EVENTS = [
     text: "Leaders gather in Jerusalem to decide whether Gentile converts must keep the Law of Moses. The council rules they need not — salvation is by grace, for Jew and Gentile alike. The theological door is now officially open.",
     lat: 31.7683, lon: 35.2137,
     category: "gentile",
-    growth: "medium",
+    growth: "small",
     believers: "a decision for all"
   },
   {

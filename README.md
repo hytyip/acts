@@ -13,9 +13,11 @@ server required (Three.js loads from a CDN via plain `<script>` tags).
 - Use the timeline bar (or arrow keys) to step through 16 key events. The
   opening move drops the camera in close to the map; after that it travels
   from city to city at whatever zoom you are sitting at.
-- Every city holds a small crowd of figures. They stand gray until the
-  gospel reaches that place, then take colour and raise their hands — blue
-  (Jewish), purple (Samaritan/God-fearer), gold (Gentile).
+- Cities sit dim until the gospel reaches them. As it arrives, coloured
+  light blooms out across the surrounding land — blue (Jewish), purple
+  (Samaritan/God-fearer), gold (Gentile) — and neighbouring regions run
+  together, so the lit part of the map grows as the account moves outward.
+  The light is held to the coastline, so the sea stays dark.
 - Glowing arcs trace the missionary journeys between stops.
 - Hit play to auto-advance through the whole narrative.
 
