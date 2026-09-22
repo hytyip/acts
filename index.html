@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>From Jerusalem to the Nations — The Book of Acts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="scene-container"></div>
+<div id="label-layer"></div>
+
+<header id="app-header">
+  <h1>From Jerusalem to the Nations</h1>
+  <p>How the gospel spread from Jew to Gentile in the Book of Acts</p>
+</header>
+
+<button id="legend-toggle" aria-label="Toggle legend">Legend</button>
+<aside id="legend">
+  <h2>Key</h2>
+  <div class="legend-row"><span class="dot" style="background:#5b8fd1"></span> To the Jew First</div>
+  <div class="legend-row"><span class="dot" style="background:#9b6bcc"></span> Samaritans &amp; God-fearers</div>
+  <div class="legend-row"><span class="dot" style="background:#e0a544"></span> To the Nations</div>
+  <p class="legend-note">Dim gray dots mark a place before the gospel arrives there. Drag to rotate the globe, scroll to zoom.</p>
+</aside>
+
+<section id="info-panel">
+  <div class="info-badge" id="info-category"></div>
+  <div class="info-step" id="info-step"></div>
+  <h2 id="info-place"></h2>
+  <h3 id="info-subtitle"></h3>
+  <p class="info-verse" id="info-verse"></p>
+  <p class="info-text" id="info-text"></p>
+  <div class="info-believers">
+    <span class="label">Response:</span> <span id="info-believers"></span>
+  </div>
+</section>
+
+<footer id="timeline-bar">
+  <button id="btn-prev" title="Previous">&#9664;</button>
+  <button id="btn-play" title="Play / Pause">&#9654;</button>
+  <button id="btn-next" title="Next">&#9654;&#9654;</button>
+  <input type="range" id="timeline-slider" min="0" max="15" step="1" value="0">
+  <div id="timeline-label">Step 1 of 16</div>
+  <button id="btn-reset" title="Reset">&#8635;</button>
+</footer>
+
+<div id="loading">Loading the map of the ancient world&hellip;</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/renderers/CSS2DRenderer.js"></script>
+<script src="data.js"></script>
+<script src="worldmap.js"></script>
+<script src="main.js"></script>
+</body>
+</html>
