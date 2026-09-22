@@ -11,17 +11,20 @@ server required (Three.js loads from a CDN via plain `<script>` tags).
 
 - Drag to rotate the globe, scroll to zoom.
 - Use the timeline bar (or arrow keys) to step through 16 key events. The
-  camera flies to each city and zooms in close enough to read the map.
-- Each stop lights up a "population" of dots at that city, colored by who
-  received the message: blue (Jewish), purple (Samaritan/God-fearer), or
-  gold (Gentile). Dots stay gray until the gospel reaches that place.
+  opening move drops the camera in close to the map; after that it travels
+  from city to city at whatever zoom you are sitting at.
+- Every city holds a small crowd of figures. They stand gray until the
+  gospel reaches that place, then take colour and raise their hands — blue
+  (Jewish), purple (Samaritan/God-fearer), gold (Gentile).
 - Glowing arcs trace the missionary journeys between stops.
 - Hit play to auto-advance through the whole narrative.
 
 Files: `index.html`, `style.css`, `data.js` (the 16 Acts events/coordinates),
-`worldmap.js` (coastline geometry), `main.js` (the Three.js scene, globe
-texture, and timeline logic).
+`worldmap.js` (coastlines, rivers and lakes), `main.js` (the Three.js scene,
+globe texture, and timeline logic).
 
-Coastlines are Natural Earth 1:50m land polygons (public domain, via the
-`world-atlas` project), drawn onto the globe texture at runtime — so every
-city sits at its true latitude/longitude on real geography.
+Geography is Natural Earth 1:50m, public domain: land polygons via the
+`world-atlas` project, rivers and lakes via `natural-earth-vector`. The globe
+texture is drawn at runtime — coastlines, river network, lakes, climate
+banding and a relief bump map — so every city sits at its true
+latitude/longitude on real terrain.

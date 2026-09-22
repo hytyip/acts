@@ -27,57 +27,174 @@
     return function () { s = (s * 9301 + 49297) % 233280; return s / 233280; };
   }
 
-  // ---------- world texture from real coastlines ----------
-  // WORLD_LAND: Natural Earth 1:50m land polygons, see worldmap.js
-  function buildEarthTexture() {
-    var W = 3072, H = 1536;
+  // ---------- world texture from real geography ----------
+  // WORLD_LAND / WORLD_RIVERS / WORLD_LAKES: Natural Earth 1:50m, see worldmap.js
+  var TEX_W = 3072, TEX_H = 1536;
+
+  function px(lon) { return ((lon + 180) / 360) * TEX_W; }
+  function py(lat) { return ((90 - lat) / 180) * TEX_H; }
+
+  function buildLandPath() {
+    var path = new Path2D();
+    WORLD_LAND.forEach(function (poly) {
+      poly.forEach(function (ring) {
+        for (var i = 0; i < ring.length; i += 2) {
+          if (i === 0) path.moveTo(px(ring[i]), py(ring[i + 1]));
+          else path.lineTo(px(ring[i]), py(ring[i + 1]));
+        }
+        path.closePath();
+      });
+    });
+    return path;
+  }
+
+  // smooth value noise: random pixels at low res, upscaled with interpolation
+  function noiseCanvas(w, h, seed, lo, hi) {
+    var c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    var cx = c.getContext("2d");
+    var img = cx.createImageData(w, h);
+    var rnd = seededRandom(seed);
+    for (var i = 0; i < w * h; i++) {
+      var v = lo + rnd() * (hi - lo);
+      img.data[i * 4] = v; img.data[i * 4 + 1] = v; img.data[i * 4 + 2] = v;
+      img.data[i * 4 + 3] = 255;
+    }
+    cx.putImageData(img, 0, 0);
+    return c;
+  }
+
+  function drawTerrainNoise(ctx, octaves) {
+    ctx.globalCompositeOperation = "overlay";
+    octaves.forEach(function (o) {
+      ctx.globalAlpha = o.alpha;
+      ctx.drawImage(noiseCanvas(o.w, o.h, o.seed, o.lo, o.hi), 0, 0, TEX_W, TEX_H);
+    });
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
+  }
+
+  function buildEarthTexture(landPath) {
     var canvas = document.createElement("canvas");
-    canvas.width = W; canvas.height = H;
+    canvas.width = TEX_W; canvas.height = TEX_H;
     var ctx = canvas.getContext("2d");
 
-    var oceanGrad = ctx.createLinearGradient(0, 0, 0, H);
+    var oceanGrad = ctx.createLinearGradient(0, 0, 0, TEX_H);
     oceanGrad.addColorStop(0, "#071526");
     oceanGrad.addColorStop(0.5, "#0c2742");
     oceanGrad.addColorStop(1, "#071526");
     ctx.fillStyle = oceanGrad;
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillRect(0, 0, TEX_W, TEX_H);
 
-    ctx.fillStyle = "#3b3521";
-    ctx.strokeStyle = "#6a5e3b";
-    ctx.lineWidth = 2;
-    ctx.lineJoin = "round";
+    // land is built on its own transparent layer, then masked back to the
+    // coastline so climate tint and terrain noise never bleed into the sea
+    var landCv = document.createElement("canvas");
+    landCv.width = TEX_W; landCv.height = TEX_H;
+    var lc = landCv.getContext("2d");
 
-    WORLD_LAND.forEach(function (poly) {
-      ctx.beginPath();
-      poly.forEach(function (ring) {
-        for (var i = 0; i < ring.length; i += 2) {
-          var x = ((ring[i] + 180) / 360) * W;
-          var y = ((90 - ring[i + 1]) / 180) * H;
-          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        }
-        ctx.closePath();
-      });
-      ctx.fill("evenodd");
-      ctx.stroke();
+    lc.fillStyle = "#3a3421";
+    lc.fill(landPath, "evenodd");
+
+    // climate banding: ice at the poles, temperate greens, arid sand belts
+    var climate = lc.createLinearGradient(0, 0, 0, TEX_H);
+    [[90, "rgba(196,206,216,0.30)"], [72, "rgba(150,165,175,0.16)"],
+     [58, "rgba(96,112,64,0.13)"],   [44, "rgba(108,120,58,0.15)"],
+     [33, "rgba(150,122,66,0.16)"],  [22, "rgba(164,132,70,0.20)"],
+     [12, "rgba(120,124,58,0.13)"],  [0,  "rgba(78,104,50,0.16)"],
+     [-14, "rgba(120,124,58,0.13)"], [-26, "rgba(160,130,70,0.19)"],
+     [-40, "rgba(104,116,58,0.14)"], [-58, "rgba(150,165,175,0.16)"],
+     [-90, "rgba(205,214,222,0.32)"]
+    ].forEach(function (stop) {
+      climate.addColorStop(clamp((90 - stop[0]) / 180, 0, 1), stop[1]);
+    });
+    lc.fillStyle = climate;
+    lc.fillRect(0, 0, TEX_W, TEX_H);
+
+    drawTerrainNoise(lc, [
+      { w: 220, h: 110, seed: 29, lo: 112, hi: 158, alpha: 0.35 },
+      { w: 620, h: 310, seed: 47, lo: 116, hi: 152, alpha: 0.28 }
+    ]);
+
+    // rivers, thicker for the major ones
+    lc.lineCap = "round";
+    lc.lineJoin = "round";
+    lc.strokeStyle = "rgba(96,148,186,0.85)";
+    WORLD_RIVERS.forEach(function (river) {
+      var pts = river[1];
+      lc.lineWidth = Math.max(1, 3.4 - river[0] * 0.3);
+      lc.beginPath();
+      for (var i = 0; i < pts.length; i += 2) {
+        if (i === 0) lc.moveTo(px(pts[i]), py(pts[i + 1]));
+        else lc.lineTo(px(pts[i]), py(pts[i + 1]));
+      }
+      lc.stroke();
     });
 
+    lc.fillStyle = "#12395c";
+    WORLD_LAKES.forEach(function (ring) {
+      lc.beginPath();
+      for (var i = 0; i < ring.length; i += 2) {
+        if (i === 0) lc.moveTo(px(ring[i]), py(ring[i + 1]));
+        else lc.lineTo(px(ring[i]), py(ring[i + 1]));
+      }
+      lc.closePath();
+      lc.fill();
+    });
+
+    // clip everything drawn above back to the coastline
+    lc.globalCompositeOperation = "destination-in";
+    lc.fill(landPath, "evenodd");
+    lc.globalCompositeOperation = "source-over";
+
+    ctx.drawImage(landCv, 0, 0);
+
+    ctx.strokeStyle = "rgba(126,112,72,0.9)";
+    ctx.lineWidth = 2;
+    ctx.lineJoin = "round";
+    ctx.stroke(landPath);
+
     // graticule over the whole map
-    ctx.strokeStyle = "rgba(160, 190, 220, 0.10)";
+    ctx.strokeStyle = "rgba(160, 190, 220, 0.09)";
     ctx.lineWidth = 1.5;
     for (var lon = -180; lon <= 180; lon += 15) {
-      var px = ((lon + 180) / 360) * W;
-      ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, H); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(px(lon), 0); ctx.lineTo(px(lon), TEX_H); ctx.stroke();
     }
     for (var lat = -75; lat <= 75; lat += 15) {
-      var py = ((90 - lat) / 180) * H;
-      ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(W, py); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, py(lat)); ctx.lineTo(TEX_W, py(lat)); ctx.stroke();
     }
-    ctx.strokeStyle = "rgba(190, 210, 235, 0.16)";
-    ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
+    ctx.strokeStyle = "rgba(190, 210, 235, 0.15)";
+    ctx.beginPath(); ctx.moveTo(0, py(0)); ctx.lineTo(TEX_W, py(0)); ctx.stroke();
 
     var tex = new THREE.CanvasTexture(canvas);
     tex.wrapS = THREE.RepeatWrapping;
     tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    return tex;
+  }
+
+  // relief: flat over the sea, rumpled over land, so the light picks out terrain
+  function buildReliefTexture(landPath) {
+    var canvas = document.createElement("canvas");
+    canvas.width = TEX_W; canvas.height = TEX_H;
+    var ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#808080";
+    ctx.fillRect(0, 0, TEX_W, TEX_H);
+
+    var bumpCv = document.createElement("canvas");
+    bumpCv.width = TEX_W; bumpCv.height = TEX_H;
+    var bc = bumpCv.getContext("2d");
+    bc.fillStyle = "#808080";
+    bc.fill(landPath, "evenodd");
+    drawTerrainNoise(bc, [
+      { w: 260, h: 130, seed: 71, lo: 96, hi: 168, alpha: 0.6 },
+      { w: 700, h: 350, seed: 83, lo: 110, hi: 152, alpha: 0.45 }
+    ]);
+    bc.globalCompositeOperation = "destination-in";
+    bc.fill(landPath, "evenodd");
+
+    ctx.drawImage(bumpCv, 0, 0);
+
+    var tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
     return tex;
   }
 
@@ -137,7 +254,9 @@
     scene.add(new THREE.Points(geo, mat));
   })();
 
-  // glow halo behind globe
+  // glow halo behind globe — a halo from orbit, but pure haze up close,
+  // so updateZoomScale fades it out as the camera drops toward the surface
+  var glowSprite;
   (function buildGlow() {
     var c = document.createElement("canvas");
     c.width = c.height = 256;
@@ -149,14 +268,21 @@
     gctx.fillStyle = g;
     gctx.fillRect(0, 0, 256, 256);
     var tex = new THREE.CanvasTexture(c);
-    var sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
-    sprite.scale.set(GLOBE_R * 3.6, GLOBE_R * 3.6, 1);
-    scene.add(sprite);
+    glowSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+    glowSprite.scale.set(GLOBE_R * 3.6, GLOBE_R * 3.6, 1);
+    scene.add(glowSprite);
   })();
 
   // globe
-  var globeGeo = new THREE.SphereGeometry(GLOBE_R, 64, 64);
-  var globeMat = new THREE.MeshPhongMaterial({ map: buildEarthTexture(), shininess: 4, specular: 0x101820 });
+  var globeGeo = new THREE.SphereGeometry(GLOBE_R, 96, 96);
+  var landPath = buildLandPath();
+  var globeMat = new THREE.MeshPhongMaterial({
+    map: buildEarthTexture(landPath),
+    bumpMap: buildReliefTexture(landPath),
+    bumpScale: 0.009,
+    shininess: 4,
+    specular: 0x101820
+  });
   var globe = new THREE.Mesh(globeGeo, globeMat);
   scene.add(globe);
 
@@ -166,15 +292,54 @@
   );
   scene.add(atmosphere);
 
+  // ---------- people ----------
+  // three poses: arms down (not yet reached), arms lifting, hands raised
+  function buildPersonTexture(pose) {
+    var S = 128;
+    var c = document.createElement("canvas");
+    c.width = S; c.height = S;
+    var g = c.getContext("2d");
+    g.lineCap = "round";
+    g.lineJoin = "round";
+
+    var arms = [
+      [[46, 82], [82, 82]],  // down at the sides
+      [[28, 52], [100, 52]], // lifting outward
+      [[30, 12], [98, 12]]   // raised high
+    ][pose];
+
+    function figure() {
+      g.beginPath(); g.arc(64, 22, 12.5, 0, Math.PI * 2); g.fill();
+      g.beginPath();
+      g.moveTo(64, 36); g.lineTo(64, 78);          // torso
+      g.moveTo(64, 78); g.lineTo(50, 124);         // legs
+      g.moveTo(64, 78); g.lineTo(78, 124);
+      g.moveTo(64, 46); g.lineTo(arms[0][0], arms[0][1]);
+      g.moveTo(64, 46); g.lineTo(arms[1][0], arms[1][1]);
+      g.stroke();
+    }
+
+    // dark halo first so the figure reads against pale desert or sea
+    g.strokeStyle = "rgba(0,0,0,0.55)";
+    g.fillStyle = "rgba(0,0,0,0.55)";
+    g.lineWidth = 18;
+    figure();
+
+    g.strokeStyle = "#ffffff";
+    g.fillStyle = "#ffffff";
+    g.lineWidth = 11;
+    figure();
+
+    var tex = new THREE.CanvasTexture(c);
+    tex.minFilter = THREE.LinearFilter;
+    return tex;
+  }
+
+  var PERSON_FRAMES = [buildPersonTexture(0), buildPersonTexture(1), buildPersonTexture(2)];
+
   // ---------- markers ----------
   var markers = [];
   var arcs = [];
-
-  // shared so dot size can track camera distance in one place
-  var dotMaterial = new THREE.PointsMaterial({
-    size: GLOBE_R * 0.026, vertexColors: THREE.VertexColors,
-    transparent: true, opacity: 0.95, depthWrite: false, sizeAttenuation: true
-  });
 
   EVENTS.forEach(function (ev, i) {
     var basePos = latLonToVector3(ev.lat, ev.lon, GLOBE_R);
@@ -185,30 +350,30 @@
 
     var growth = GROWTH[ev.growth];
     var catColor = new THREE.Color(CATEGORIES[ev.category].color);
-    var discR = GLOBE_R * 0.018 * Math.sqrt(growth.scale);
     var count = growth.count;
+    // spread the crowd with its size so density stays even from town to city
+    var discR = GLOBE_R * 0.0052 * Math.sqrt(count);
 
-    var positions = new Float32Array(count * 3);
-    var colors = new Float32Array(count * 3);
-    var delays = new Float32Array(count);
+    var people = [];
     var rnd = seededRandom(i * 131 + 7);
     for (var p = 0; p < count; p++) {
       var ang = rnd() * Math.PI * 2;
       var rad = Math.sqrt(rnd()) * discR;
       var offset = tangentA.clone().multiplyScalar(Math.cos(ang) * rad)
         .add(tangentB.clone().multiplyScalar(Math.sin(ang) * rad));
-      var pos = basePos.clone().add(normal.clone().multiplyScalar(0.012)).add(offset);
-      positions[p * 3] = pos.x; positions[p * 3 + 1] = pos.y; positions[p * 3 + 2] = pos.z;
-      colors[p * 3] = GRAY.r; colors[p * 3 + 1] = GRAY.g; colors[p * 3 + 2] = GRAY.b;
-      delays[p] = rnd() * 0.9;
-    }
+      var ground = basePos.clone().add(normal.clone().multiplyScalar(0.008)).add(offset);
 
-    var geo = new THREE.BufferGeometry();
-    geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    var colorAttr = new THREE.BufferAttribute(colors, 3);
-    geo.setAttribute("color", colorAttr);
-    var points = new THREE.Points(geo, dotMaterial);
-    scene.add(points);
+      var mat = new THREE.SpriteMaterial({
+        map: PERSON_FRAMES[0], color: GRAY.clone(),
+        transparent: true, depthWrite: false
+      });
+      var sprite = new THREE.Sprite(mat);
+      sprite.center.set(0.5, 0); // anchor at the feet so they stand on the ground
+      sprite.position.copy(ground);
+      scene.add(sprite);
+
+      people.push({ sprite: sprite, mat: mat, ground: ground, delay: rnd() * 0.9, frame: 0 });
+    }
 
     // pulse ring
     var ring = new THREE.Mesh(
@@ -230,7 +395,7 @@
 
     markers.push({
       basePos: basePos, normal: normal,
-      cluster: { colorAttr: colorAttr, colors: colors, delays: delays, count: count, targetColor: catColor, triggered: false, done: false, startTime: 0 },
+      cluster: { people: people, targetColor: catColor, triggered: false, done: false, startTime: 0 },
       ring: { mesh: ring, baseScale: baseRingScale, triggered: false, startTime: 0 },
       label: { div: div }
     });
@@ -288,10 +453,13 @@
   function unrevealAll() {
     markers.forEach(function (m) {
       m.cluster.triggered = false; m.cluster.done = false;
-      for (var p = 0; p < m.cluster.count; p++) {
-        m.cluster.colors[p * 3] = GRAY.r; m.cluster.colors[p * 3 + 1] = GRAY.g; m.cluster.colors[p * 3 + 2] = GRAY.b;
-      }
-      m.cluster.colorAttr.needsUpdate = true;
+      m.cluster.people.forEach(function (person) {
+        person.mat.color.copy(GRAY);
+        person.mat.map = PERSON_FRAMES[0];
+        person.mat.needsUpdate = true;
+        person.frame = 0;
+        person.sprite.position.copy(person.ground);
+      });
       m.ring.triggered = false; m.ring.mesh.material.opacity = 0;
       m.label.div.classList.remove("reached", "current");
     });
@@ -347,20 +515,24 @@
   }
 
   var STEP_ZOOM_R = 3.15; // close enough to read the map around each city
+  var hasZoomedIn = false;
 
   function flyCameraTo(targetPos) {
     var fromDir = camera.position.clone().normalize();
     var toDir = targetPos.clone().normalize();
     var travel = fromDir.angleTo(toDir);
+    // only the opening move changes altitude; after that the camera just
+    // travels across the map at whatever zoom the viewer is sitting at
+    var toR = STEP_ZOOM_R;
+    if (hasZoomedIn) toR = camTween ? camTween.toR : camera.position.length();
+    hasZoomedIn = true;
     camTween = {
       fromDir: fromDir,
       toDir: toDir,
       fromR: camera.position.length(),
-      toR: STEP_ZOOM_R,
-      // pull back mid-flight so the journey stays visible, then settle in close
-      bump: Math.min(0.35 + travel * 2.2, 2.6),
+      toR: toR,
       start: performance.now(),
-      duration: 1000 + travel * 900
+      duration: 900 + travel * 1100
     };
     controls.enabled = false;
   }
@@ -419,30 +591,45 @@
       if (!c.triggered || c.done) return;
       var allDone = true;
       var elapsedBase = now - c.startTime;
-      for (var p = 0; p < c.count; p++) {
-        var pElapsed = elapsedBase - c.delays[p] * 900;
-        var t;
-        if (pElapsed <= 0) { t = 0; allDone = false; }
-        else { t = Math.min(1, pElapsed / 650); if (t < 1) allDone = false; }
+      c.people.forEach(function (person) {
+        var t = clamp((elapsedBase - person.delay * 900) / 650, 0, 1);
+        if (t < 1) allDone = false;
         var te = easeInOutCubic(t);
-        var r = GRAY.r + (c.targetColor.r - GRAY.r) * te;
-        var g = GRAY.g + (c.targetColor.g - GRAY.g) * te;
-        var b = GRAY.b + (c.targetColor.b - GRAY.b) * te;
-        c.colors[p * 3] = r; c.colors[p * 3 + 1] = g; c.colors[p * 3 + 2] = b;
-      }
-      c.colorAttr.needsUpdate = true;
+        person.mat.color.copy(GRAY).lerp(c.targetColor, te);
+
+        // hands come up as the colour takes, with a small hop off the ground
+        var frame = t === 0 ? 0 : (t < 0.45 ? 1 : 2);
+        if (frame !== person.frame) {
+          person.frame = frame;
+          person.mat.map = PERSON_FRAMES[frame];
+          person.mat.needsUpdate = true;
+        }
+        person.sprite.position.copy(person.ground)
+          .addScaledVector(m.normal, Math.sin(t * Math.PI) * personHeight * 0.3);
+      });
       if (allDone) c.done = true;
     });
   }
 
-  // dots and rings are sized in world units, so they are rescaled as the
+  // people and rings are sized in world units, so they are rescaled as the
   // camera closes in — otherwise a single marker swallows the screen
   var zoomRingFactor = 1;
+  var personHeight = 0.02;
+  var lastAlt = -1;
 
   function updateZoomScale() {
     var alt = Math.max(camera.position.length() - GLOBE_R, 0.25);
-    dotMaterial.size = clamp(alt * 0.0085, 0.005, 0.05);
     zoomRingFactor = clamp(0.30 + alt * 0.14, 0.30, 1);
+    if (Math.abs(alt - lastAlt) < 0.002) return;
+    lastAlt = alt;
+    glowSprite.material.opacity = clamp((alt - 1.1) / 2.8, 0, 1);
+    personHeight = clamp(alt * 0.016, 0.010, 0.09);
+    var w = personHeight * 0.78;
+    markers.forEach(function (m) {
+      m.cluster.people.forEach(function (person) {
+        person.sprite.scale.set(w, personHeight, 1);
+      });
+    });
   }
 
   function updateRings(now) {
@@ -485,8 +672,7 @@
     var qTo = new THREE.Quaternion().setFromUnitVectors(refAxis, camTween.toDir);
     var qCur = qFrom.clone().slerp(qTo, te);
     var dir = refAxis.clone().applyQuaternion(qCur);
-    var radius = camTween.fromR + (camTween.toR - camTween.fromR) * te
-      + Math.sin(te * Math.PI) * camTween.bump;
+    var radius = camTween.fromR + (camTween.toR - camTween.fromR) * te;
     camera.position.copy(dir.multiplyScalar(radius));
     camera.lookAt(0, 0, 0);
     if (t >= 1) { camTween = null; controls.enabled = true; }
