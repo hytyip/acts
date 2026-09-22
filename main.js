@@ -701,7 +701,7 @@
     playTimer = setInterval(function () {
       if (currentStep >= EVENTS.length - 1) { stopPlaying(); return; }
       goToStep(currentStep + 1);
-    }, 4200);
+    }, 2100);
   }
 
   btnPrev.addEventListener("click", function () { stopPlaying(); goToStep(currentStep - 1); });
