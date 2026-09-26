@@ -164,7 +164,7 @@ function createPopulationView(options) {
   function setActive(value) {
     if (active === value) return;
     active = value;
-    toggle.textContent = active ? "Back to Acts" : "Christian population";
+    toggle.textContent = active ? "Back to Acts" : "Christian population in 2020";
     toggle.setAttribute("aria-expanded", String(active));
     toggle.setAttribute("aria-pressed", String(active));
     panel.hidden = !active;

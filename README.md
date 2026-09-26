@@ -48,7 +48,7 @@ from Google Fonts. This is not a fully offline app.
 - The system's reduced-motion preference disables camera flights, cloud
   drift and animated figures, and shows the light circle at its full size.
   Static scenes render only when needed.
-- **Christian population** opens a worldwide view with searchable country
+- **Christian population in 2020** opens a worldwide view with searchable country
   estimates. Each country is drawn as a scatter of dots, one per 250,000
   people, spread across its territory — so a population reads as the ground it
   covers, not as a single marker. Selecting a country brightens its dots and

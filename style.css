@@ -507,11 +507,12 @@ html, body{
   #legend{
     display: none;
     top: auto;
-    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    /* clears the population button below it, which is 44px tall at 88px up */
+    bottom: calc(142px + env(safe-area-inset-bottom, 0px));
     right: 8px;
     left: 8px;
     width: auto;
-    max-height: calc(100vh - 154px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    max-height: calc(100vh - 212px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
     overflow-y: auto;
     overscroll-behavior: contain;
   }
@@ -540,7 +541,13 @@ html, body{
     max-height: calc(100vh - 156px - env(safe-area-inset-top, 0px));
     padding: 12px 14px;
   }
-  #legend{ top: calc(62px + env(safe-area-inset-top, 0px)); bottom: auto; max-height: calc(100vh - 156px); overflow-y: auto; }
+  /* stop short of the population button, which sits bottom-right on a screen
+     this shape */
+  #legend{
+    top: calc(62px + env(safe-area-inset-top, 0px)); bottom: auto;
+    max-height: calc(100vh - 214px - env(safe-area-inset-top, 0px));
+    overflow-y: auto;
+  }
   #timeline-bar{ bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
   #population-panel{ top: 45px; bottom: 70px; max-height: none; width: 300px; right: auto; }
   #population-toggle{ top: auto; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
