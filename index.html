@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="description" content="Explore 16 key events in the Book of Acts on an interactive globe, from Jerusalem to Rome.">
 <title>From Jerusalem to the Nations — The Book of Acts</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -11,33 +12,35 @@
 </head>
 <body>
 
-<div id="scene-container"></div>
-<div id="label-layer"></div>
+<div id="app" inert>
+<div id="scene-container" role="img" aria-label="Globe showing the spread of the gospel. The current event is described below."></div>
+<div id="label-layer" aria-hidden="true"></div>
 
 <header id="app-header">
   <h1>From Jerusalem to the Nations</h1>
   <p>How the gospel spread from Jew to Gentile in the Book of Acts</p>
 </header>
 
-<button id="legend-toggle" aria-label="Toggle legend">Legend</button>
+<button id="legend-toggle" type="button" aria-controls="legend" aria-expanded="false">Legend</button>
+<button id="population-toggle" type="button" aria-controls="population-panel" aria-expanded="false" aria-pressed="false">Christian population</button>
 <aside id="legend">
   <h2>Key</h2>
   <div class="legend-row"><span class="dot" style="background:#5b8fd1"></span> To the Jew First</div>
   <div class="legend-row"><span class="dot" style="background:#9b6bcc"></span> Samaritans &amp; God-fearers</div>
   <div class="legend-row"><span class="dot" style="background:#e0a544"></span> To the Nations</div>
-  <p class="legend-note">Gray figures are a people the gospel has not reached yet. As it arrives they take colour, raise their hands, and light spreads across the land. Drag to rotate, scroll to zoom.</p>
+  <p class="legend-note">Gray figures mark events still ahead in this timeline. Figures and light illustrate the scale of each event, not exact numbers of converts. Arcs connect selected events, not every stop on a journey. Drag to rotate, scroll or pinch to zoom.</p>
 
   <h2 class="legend-sub">Place names</h2>
   <div id="era-switch" role="group" aria-label="Place name layer">
-    <button type="button" data-era="roman" class="active">Acts era</button>
-    <button type="button" data-era="modern">Today</button>
-    <button type="button" data-era="none">Off</button>
+    <button type="button" data-era="roman" class="active" aria-pressed="true">Acts era</button>
+    <button type="button" data-era="modern" aria-pressed="false">Today</button>
+    <button type="button" data-era="none" aria-pressed="false">Off</button>
   </div>
 </aside>
 
-<section id="info-panel">
+<main id="info-panel" aria-labelledby="info-place" tabindex="0">
   <div class="info-badge" id="info-category"></div>
-  <div class="info-step" id="info-step"></div>
+  <div class="info-step" id="info-step" aria-hidden="true"></div>
   <h2 id="info-place"></h2>
   <h3 id="info-subtitle"></h3>
   <p class="info-verse" id="info-verse"></p>
@@ -45,18 +48,42 @@
   <div class="info-believers">
     <span class="label">Response:</span> <span id="info-believers"></span>
   </div>
+</main>
+<section id="population-panel" aria-labelledby="population-title" hidden>
+  <div class="population-eyebrow" id="population-year"></div>
+  <h2 id="population-title">Christians worldwide</h2>
+  <p class="population-intro">People identifying as Christian, across all ages and traditions.</p>
+  <div id="population-detail" aria-live="polite" aria-atomic="true">
+    <h3 id="population-place">Worldwide</h3>
+    <p id="population-count"></p>
+    <p id="population-share"></p>
+  </div>
+  <label for="population-search">Find a country or territory</label>
+  <input id="population-search" type="search" placeholder="Search countries…" autocomplete="off" aria-controls="population-list">
+  <p id="population-results" role="status"></p>
+  <div id="population-list" role="group" aria-label="Country and territory estimates"></div>
+  <p class="population-note" id="population-coverage"></p>
+  <p class="population-note" id="population-dot-note"></p>
+  <p class="population-note">Figures describe religious affiliation, not levels of belief or practice. These are historical estimates, not live counts for 2026.</p>
+  <p class="population-source"><a id="population-source" target="_blank" rel="noopener noreferrer">Pew Research Center</a> · <a id="population-methodology" target="_blank" rel="noopener noreferrer">Methodology</a></p>
 </section>
+<div id="event-status" class="sr-only" role="status" aria-atomic="true"></div>
 
 <footer id="timeline-bar">
-  <button id="btn-prev" title="Previous">&#9664;</button>
-  <button id="btn-play" title="Play / Pause">&#9654;</button>
-  <button id="btn-next" title="Next">&#9654;&#9654;</button>
-  <input type="range" id="timeline-slider" min="0" max="15" step="1" value="0">
-  <div id="timeline-label">Step 1 of 16</div>
-  <button id="btn-reset" title="Reset">&#8635;</button>
+  <button id="btn-prev" type="button" title="Previous event" aria-label="Previous event" disabled>&#9664;</button>
+  <button id="btn-play" type="button" title="Play timeline" aria-label="Play timeline" aria-pressed="false">&#9654;</button>
+  <button id="btn-next" type="button" title="Next event" aria-label="Next event">&#9654;&#9654;</button>
+  <input type="range" id="timeline-slider" min="0" max="15" step="1" value="0" aria-label="Timeline event" aria-controls="info-panel">
+  <div id="timeline-label" aria-hidden="true">Step 1 of 16</div>
+  <button id="btn-reset" type="button" title="Reset timeline and view" aria-label="Reset timeline and view">&#8635;</button>
 </footer>
+</div>
 
-<div id="loading">Loading the map of the ancient world&hellip;</div>
+<div id="loading" role="status" aria-live="polite">
+  <p id="loading-message">Loading the map of the ancient world&hellip;</p>
+  <button id="btn-retry" type="button" hidden>Try again</button>
+  <noscript><style>#loading-message { display: none; }</style><p>Enable JavaScript to explore the Book of Acts timeline.</p></noscript>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -64,6 +91,9 @@
 <script src="data.js"></script>
 <script src="worldmap.js"></script>
 <script src="textures.js"></script>
+<script src="population-data.js"></script>
+<script src="population-dots.js"></script>
+<script src="population.js"></script>
 <script src="main.js"></script>
 </body>
 </html>

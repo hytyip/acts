@@ -18,11 +18,11 @@ const EVENTS = [
     place: "Jerusalem",
     subtitle: "The Church Multiplies, Then Scatters",
     verse: "Acts 4:4; 6:8–8:1",
-    text: "The Jerusalem church grows to over 5,000. But Stephen is martyred and \"a great persecution\" breaks out. Believers are scattered across Judea and Samaria — the first push outward beyond the holy city.",
+    text: "The number of men who believe in Jerusalem reaches about 5,000. Later, Stephen is martyred and \"a great persecution\" breaks out. Believers are scattered across Judea and Samaria — the first push outward beyond the holy city.",
     lat: 31.7683, lon: 35.2137,
     category: "jewish",
     growth: "huge",
-    believers: "≈ 5,000+"
+    believers: "≈ 5,000 men in total"
   },
   {
     place: "Samaria",
@@ -42,7 +42,7 @@ const EVENTS = [
     lat: 31.5017, lon: 34.4668,
     category: "transition",
     growth: "small",
-    believers: "1 household"
+    believers: "1 official"
   },
   {
     place: "Damascus",
@@ -58,7 +58,7 @@ const EVENTS = [
     place: "Caesarea",
     subtitle: "Cornelius — The Turning Point",
     verse: "Acts 10:1–11:18",
-    text: "Peter is sent to Cornelius, a Roman centurion. As Peter preaches, the Holy Spirit falls on Cornelius's entire Gentile household — uncircumcised, with no prior link to Judaism. The Jerusalem church concludes: \"God has granted repentance that leads to life even to the Gentiles.\"",
+    text: "Peter is sent to Cornelius, a Roman centurion who already fears God, prays, and gives generously to the Jewish people. As Peter preaches, the Holy Spirit falls on the Gentiles gathered in his house, including relatives and close friends. They are baptized without first becoming Jewish converts.",
     lat: 32.5000, lon: 34.9000,
     category: "gentile",
     growth: "large",
@@ -173,7 +173,8 @@ const CATEGORIES = {
   gentile:    { label: "To the Nations",           color: 0xe0a544 }
 };
 
-/* Growth magnitude -> particle count & pulse scale */
+/* Illustrative event magnitude -> figure count & pulse scale.
+   These are not population estimates or exact conversion counts. */
 const GROWTH = {
   small:  { count: 8,  scale: 0.6 },
   medium: { count: 16, scale: 1.0 },
